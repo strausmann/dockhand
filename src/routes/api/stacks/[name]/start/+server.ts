@@ -29,7 +29,7 @@ export const POST: RequestHandler = async (event) => {
 		await auditStack(event, 'start', stackName, envIdNum);
 
 		if (!result.success) {
-			return json({ success: false, error: result.error }, { status: 400 });
+			return json({ success: false, error: result.error, output: result.output }, { status: 400 });
 		}
 		return json({ success: true, output: result.output });
 	} catch (error) {

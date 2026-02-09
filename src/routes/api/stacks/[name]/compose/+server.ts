@@ -93,7 +93,10 @@ export const PUT: RequestHandler = async ({ params, request, url, cookies }) => 
 		}
 
 		if (!result.success) {
-			return json({ error: result.error }, { status: 500 });
+			return json({ 
+				error: result.error,
+				output: result.output // Include Docker Compose output for debugging
+			}, { status: 500 });
 		}
 
 		return json({ success: true });

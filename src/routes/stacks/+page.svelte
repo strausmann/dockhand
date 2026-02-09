@@ -298,10 +298,10 @@
 	let operationError = $state<{ id: string; title: string; message: string } | null>(null);
 
 	// Error dialog state (for showing detailed errors)
-	let errorDialogData = $state<{ title: string; message: string } | null>(null);
+	let errorDialogData = $state<{ title: string; message: string; details?: string } | null>(null);
 
-	function showErrorDialog(title: string, message: string) {
-		errorDialogData = { title, message };
+	function showErrorDialog(title: string, message: string, details?: string) {
+		errorDialogData = { title, message, details };
 	}
 
 	// Container inspect modal state
@@ -690,13 +690,15 @@
 			if (!response.ok) {
 				const rawText = await response.text();
 				let errorMsg = 'Failed to start stack';
+				let details: string | undefined;
 				try {
 					const data = JSON.parse(rawText);
 					errorMsg = data.error || errorMsg;
+					details = data.output;
 				} catch {
 					errorMsg = rawText || errorMsg;
 				}
-				showErrorDialog(`Failed to start ${name}`, errorMsg);
+				showErrorDialog(`Failed to start ${name}`, errorMsg, details);
 				return;
 			}
 			toast.success(`Started ${name}`);
@@ -718,13 +720,15 @@
 			if (!response.ok) {
 				const rawText = await response.text();
 				let errorMsg = 'Failed to stop stack';
+				let details: string | undefined;
 				try {
 					const data = JSON.parse(rawText);
 					errorMsg = data.error || errorMsg;
+					details = data.output;
 				} catch {
 					errorMsg = rawText || errorMsg;
 				}
-				showErrorDialog(`Failed to stop ${name}`, errorMsg);
+				showErrorDialog(`Failed to stop ${name}`, errorMsg, details);
 				return;
 			}
 			toast.success(`Stopped ${name}`);
@@ -746,13 +750,15 @@
 			if (!response.ok) {
 				const rawText = await response.text();
 				let errorMsg = 'Failed to restart stack';
+				let details: string | undefined;
 				try {
 					const data = JSON.parse(rawText);
 					errorMsg = data.error || errorMsg;
+					details = data.output;
 				} catch {
 					errorMsg = rawText || errorMsg;
 				}
-				showErrorDialog(`Failed to restart ${name}`, errorMsg);
+				showErrorDialog(`Failed to restart ${name}`, errorMsg, details);
 				return;
 			}
 			toast.success(`Restarted ${name}`);
@@ -777,14 +783,16 @@
 
 			if (!response.ok) {
 				let errorMsg = 'Failed to bring down stack';
+				let details: string | undefined;
 				try {
 					const data = JSON.parse(rawText);
 					errorMsg = data.error || errorMsg;
+					details = data.output;
 				} catch {
 					// Response may not be valid JSON
 					errorMsg = rawText || errorMsg;
 				}
-				showErrorDialog(`Failed to bring down ${name}`, errorMsg);
+				showErrorDialog(`Failed to bring down ${name}`, errorMsg, details);
 				return;
 			}
 			toast.success(`Brought down ${name}`);
@@ -2041,6 +2049,7 @@
 		open={true}
 		title={errorDialogData.title}
 		message={errorDialogData.message}
+		details={errorDialogData.details}
 		onClose={() => errorDialogData = null}
 	/>
 {/if}

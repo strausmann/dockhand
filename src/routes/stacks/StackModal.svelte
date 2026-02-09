@@ -1038,8 +1038,28 @@ services:
 				requestBody.moveFromDir = moveFromDir;
 			}
 
+<<<<<<< Updated upstream
 			// Save env files BEFORE compose to ensure deploy reads fresh values
 			// Save raw content to .env file (non-secrets only, comments preserved)
+=======
+			// Save compose file (with optional paths)
+			const response = await fetch(
+				appendEnvParam(`/api/stacks/${encodeURIComponent(stackName)}/compose`, envId),
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(requestBody)
+				}
+			);
+
+			const data = await response.json();
+
+			if (!response.ok) {
+			const error = new Error(data.error || 'Failed to save compose file');
+			// Include output as details for better error diagnostics
+			(error as any).details = data.output;
+			throw error;
+>>>>>>> Stashed changes
 			const rawEnvResponse = await fetch(
 				appendEnvParam(`/api/stacks/${encodeURIComponent(stackName)}/env/raw`, envId),
 				{
