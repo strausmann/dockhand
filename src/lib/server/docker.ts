@@ -482,6 +482,13 @@ export async function dockerFetch(
 
 		// Send request through edge connection
 		try {
+			// Determine timeout based on request type:
+			// - Compose operations need more time (up to 5 minutes)
+			// - Streaming requests also get 5 minutes
+			// - Normal API requests get 30 seconds
+			const isComposeOperation = path === '/_hawser/compose';
+			const timeout = streaming ? 300000 : isComposeOperation ? 300000 : 30000;
+			
 			const edgeResponse = await sendEdgeRequest(
 				config.environmentId,
 				method,
@@ -489,7 +496,7 @@ export async function dockerFetch(
 				body,
 				headers,
 				streaming || false,
-				streaming ? 300000 : 30000 // 5 min for streaming, 30s for normal requests
+				timeout
 			);
 			const elapsed = Date.now() - startTime;
 			// Only warn for slow requests, but skip /stats which is expected to be slow (5-10s)
@@ -609,8 +616,11 @@ export async function dockerFetch(
 		}
 
 		// Add default timeout for non-streaming requests to prevent socket accumulation
+		// Compose operations need more time (up to 5 minutes)
 		if (!streaming && !finalOptions.signal) {
-			finalOptions.signal = AbortSignal.timeout(30000);
+			const isComposeOperation = path === '/_hawser/compose';
+			const timeout = isComposeOperation ? 300000 : 30000;
+			finalOptions.signal = AbortSignal.timeout(timeout);
 		}
 
 		try {
