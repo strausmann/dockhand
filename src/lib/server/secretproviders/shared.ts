@@ -43,13 +43,27 @@ export interface ConnectConfig {
 }
 
 /**
- * Infisical: an API host (self-hosted or cloud), a machine-identity or service
- * token, and the project/environment coordinates a bulk pull targets. `path`
- * and `environment` may be overridden per stack via the bulk selector.
+ * Infisical: an API host (self-hosted or cloud) and the project/environment
+ * coordinates a bulk pull targets. `path` and `environment` may be overridden
+ * per stack via the bulk selector.
+ *
+ * Auth is one of two mutually-usable shapes:
+ *   - `token` — a ready-to-use API access token / service token, sent as-is.
+ *   - `clientId` + `clientSecret` — a Machine Identity authenticating via
+ *     Universal Auth (`POST /api/v1/auth/universal-auth/login`). The provider
+ *     exchanges these for a short-lived access token and caches it until it
+ *     is close to expiry.
+ *
+ * When both are present, Universal Auth takes precedence (a static token is
+ * the legacy/simple path; Machine Identity is the least-privilege path teams
+ * moving off shared service tokens want). `token` stays required-by-config-shape
+ * as optional so existing configs keep working unchanged.
  */
 export interface InfisicalConfig {
 	host: string;
-	token: string;
+	token?: string;
+	clientId?: string;
+	clientSecret?: string;
 	projectId: string;
 	environment?: string;
 	path?: string;

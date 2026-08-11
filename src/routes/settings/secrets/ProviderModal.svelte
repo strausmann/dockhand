@@ -37,7 +37,9 @@
 		],
 		infisical: [
 			{ key: 'host', label: 'API host', type: 'text', required: true, placeholder: 'https://app.infisical.com' },
-			{ key: 'token', label: 'Access token', type: 'password', required: true, placeholder: 'st...' },
+			{ key: 'token', label: 'Access token', type: 'password', required: false, placeholder: 'st...', hint: 'Static token. Leave blank and fill in Client ID + Client secret below to authenticate as a Machine Identity via Universal Auth instead.' },
+			{ key: 'clientId', label: 'Client ID (Universal Auth)', type: 'text', required: false, placeholder: 'Machine Identity client ID' },
+			{ key: 'clientSecret', label: 'Client secret (Universal Auth)', type: 'password', required: false, placeholder: 'Machine Identity client secret' },
 			{ key: 'projectId', label: 'Project ID', type: 'text', required: true, placeholder: 'workspace / project id' },
 			{ key: 'environment', label: 'Environment', type: 'text', required: true, placeholder: 'prod' },
 			{ key: 'path', label: 'Secret path', type: 'text', required: false, placeholder: '/' },
@@ -137,6 +139,32 @@
 		return null;
 	}
 
+	// Cross-field checks the per-field `required` flag cannot express: Infisical
+	// accepts either a static token or a Universal Auth client ID + secret pair,
+	// not "field X is always required", so this runs in addition to
+	// missingRequired(). Mirrors authConfigError() in
+	// src/lib/server/secretproviders/infisical.ts.
+	function configError(config: Record<string, string>): string | null {
+		const required = missingRequired(config);
+		if (required) return required;
+
+		if (formType === 'infisical') {
+			const hasToken = !!config.token;
+			const hasClientId = !!config.clientId;
+			const hasClientSecret = !!config.clientSecret;
+			if (hasClientId && !hasClientSecret) {
+				return 'Client secret is required when a client ID is set';
+			}
+			if (hasClientSecret && !hasClientId) {
+				return 'Client ID is required when a client secret is set';
+			}
+			if (!hasToken && !(hasClientId && hasClientSecret)) {
+				return 'Provide either an access token or a Universal Auth client ID and client secret';
+			}
+		}
+		return null;
+	}
+
 	function onTypeChange(value: string) {
 		formType = value;
 		// Fields differ per type; drop any stale values.
@@ -158,7 +186,7 @@
 					method: 'POST',
 				});
 			} else {
-				const missing = missingRequired(config);
+				const missing = configError(config);
 				if (missing) {
 					formError = missing;
 					return;
@@ -196,7 +224,7 @@
 		// (blank keeps the stored config); if the user touches any field they
 		// must supply the whole config, since it is replaced wholesale.
 		if (!isEditing || configProvided) {
-			const missing = missingRequired(config);
+			const missing = configError(config);
 			if (missing) {
 				formError = missing;
 				return;
