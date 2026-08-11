@@ -4,7 +4,7 @@ import { getDockerInfo, getHawserInfo } from '$lib/server/docker';
 import { getEnvironment } from '$lib/server/db';
 import { authorize } from '$lib/server/authorize';
 import { getEdgeConnectionInfo } from '$lib/server/hawser';
-import { getHostDiskInfo } from '$lib/server/host-disk-core';
+import { getHostDiskInfo, deriveEdgeDiskInfo, type HostDiskInfo } from '$lib/server/host-disk-core';
 import os from 'node:os';
 
 export interface HostInfo {
@@ -16,8 +16,11 @@ export interface HostInfo {
 	totalMemory: number;
 	freeMemory: number;
 	// Disk stats for the Docker daemon's data-root (DockerRootDir), not
-	// necessarily '/'. Null for remote/Hawser environments — see
-	// getHostDiskInfo() in host-disk-core.ts.
+	// necessarily '/'. For local socket connections these come from
+	// getHostDiskInfo(); for hawser-edge connections from the agent's own
+	// metrics (see deriveEdgeDiskInfo()), both in host-disk-core.ts. Null for
+	// 'direct'/'hawser-standard' connections, or before the first hawser-edge
+	// metrics message has arrived.
 	diskTotal: number | null;
 	diskFree: number | null;
 	diskAvailable: number | null;
@@ -59,7 +62,7 @@ function getLocalIpAddress(): string {
  * summary: Return host info (hostname, IP, CPU, memory, disk, uptime, Docker counts) for the daemon behind an environment
  * query: env:integer ID of the environment to describe (basic local info is returned when omitted) (from GET /api/environments)
  * resp-200: {hostname:string!, ipAddress:string!, platform:string!, arch:string!, cpus:integer!, totalMemory:integer!, freeMemory:integer!, diskTotal:integer, diskFree:integer, diskAvailable:integer, uptime:integer!, dockerVersion:string, dockerContainers:integer!, dockerContainersRunning:integer!, dockerImages:integer!, environment:object}
- * resp-200-desc: diskTotal/diskFree/diskAvailable are null unless env resolves to a local socket connection; measured against the Docker data-root (DockerRootDir from /info), not necessarily '/' (see the getHostDiskInfo() doc comment in host-disk-core.ts)
+ * resp-200-desc: diskTotal/diskFree/diskAvailable are measured against the Docker data-root (DockerRootDir from /info), not necessarily '/'; for a local socket connection they come from getHostDiskInfo(), for a connected hawser-edge agent from its own reported metrics (deriveEdgeDiskInfo()), and are null for any other connection type or before the first hawser-edge metrics message arrives (see host-disk-core.ts)
  * resp-200-example: {"hostname":"docker-host","ipAddress":"192.168.1.10","platform":"linux","arch":"x64","cpus":8,"totalMemory":16777216000,"freeMemory":8388608000,"diskTotal":107374182400,"diskFree":53687091200,"diskAvailable":50000000000,"uptime":123456,"dockerVersion":"27.0.3","dockerContainers":10,"dockerContainersRunning":8,"dockerImages":25,"environment":{"id":1,"name":"local","connectionType":"socket"}}
  * resp-403: Permission denied, or (enterprise) no access to this environment
  * resp-500: Failed to get host info
@@ -120,6 +123,11 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 		let dockerInfo: any;
 		let uptime = 0;
 		let hawserVersion: string | undefined;
+		// Disk stats reported by a hawser-edge agent's own metrics (see
+		// deriveEdgeDiskInfo() in host-disk-core.ts) - only set for connectionType
+		// 'hawser-edge', stays null for every other type (including
+		// 'hawser-standard', which has no equivalent agent-side disk channel).
+		let edgeDiskInfo: HostDiskInfo | null = null;
 
 		if (env.connectionType === 'hawser-standard') {
 			// Parallel fetch for hawser-standard
@@ -146,17 +154,22 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 				if (edgeConn?.lastMetrics?.uptime) {
 					uptime = edgeConn.lastMetrics.uptime;
 				}
+				edgeDiskInfo = deriveEdgeDiskInfo(edgeConn?.lastMetrics);
 			}
 			// For 'direct' connections without Hawser, uptime remains 0 (not available)
 		}
 
-		// Disk stats are only meaningful for a local connection - see the
-		// getHostDiskInfo() doc comment in host-disk-core.ts for why remote/Hawser
-		// hosts are skipped. Measured against Docker's own data-root (DockerRootDir
-		// from /info) rather than '/' — the two can differ when `data-root` in
-		// daemon.json points at a separate disk/mount (#976). This needs dockerInfo,
-		// so it runs after the fetch above instead of in parallel with it.
-		const diskInfo = isLocalConnection ? await getHostDiskInfo(dockerInfo?.DockerRootDir) : null;
+		// Disk stats: for a local connection, measured against Docker's own
+		// data-root (DockerRootDir from /info) rather than '/' — the two can
+		// differ when `data-root` in daemon.json points at a separate disk/mount
+		// (#976). This needs dockerInfo, so it runs after the fetch above instead
+		// of in parallel with it. For a hawser-edge connection, edgeDiskInfo was
+		// already derived above from the agent's own metrics — there is no local
+		// getHostDiskInfo() call to make for a remote host. Every other
+		// connection type has neither and stays null.
+		const diskInfo = isLocalConnection
+			? await getHostDiskInfo(dockerInfo?.DockerRootDir)
+			: edgeDiskInfo;
 
 		const hostInfo: HostInfo = {
 			// Hostname/IP describe the Docker DAEMON's host, NOT Dockhand's own

@@ -43,3 +43,47 @@ export async function getHostDiskInfo(rootPath?: string): Promise<HostDiskInfo |
 		return null;
 	}
 }
+
+/**
+ * Disk fields as reported by a hawser-edge agent's periodic metrics message
+ * (see `MetricsMessage['metrics']` in hawser.ts and `HawserMetrics` in
+ * vite.config.ts) - the agent runs its own statfs()-equivalent against the
+ * remote host's Docker data-root and sends the raw numbers over the
+ * WebSocket, there is no local getHostDiskInfo() call for this connection
+ * type.
+ */
+export interface EdgeDiskMetrics {
+	diskTotal: number;
+	diskUsed: number;
+	diskFree: number;
+}
+
+/**
+ * Turns a hawser-edge agent's disk metrics into the same {diskTotal,
+ * diskFree, diskAvailable} shape getHostDiskInfo() returns for local
+ * connections, so /api/host can treat both connection types uniformly.
+ *
+ * Returns null when `metrics` is absent (no metrics message has arrived yet)
+ * or `diskTotal` is not a positive number. The agent sends 0 for all three
+ * disk fields when its own statfs()-equivalent call fails - treating that as
+ * "0 bytes free" would render as a false "disk full" alarm in the UI instead
+ * of "not available yet", which is what a failed getHostDiskInfo() call
+ * already reports as (null) for local connections. Tracking the agent-side
+ * 0-vs-null fix itself is out of scope here (see PR description).
+ *
+ * The agent doesn't send a separate "available" (bavail, excludes blocks
+ * reserved for the superuser) figure the way getHostDiskInfo() does locally
+ * - only diskTotal/diskUsed/diskFree (see EdgeDiskMetrics above). diskAvailable
+ * is therefore derived as diskTotal - diskUsed rather than copied from
+ * diskFree, so it stays defined even if a future agent version reports
+ * diskFree and diskUsed inconsistently; in practice the two will usually be
+ * very close.
+ */
+export function deriveEdgeDiskInfo(metrics: EdgeDiskMetrics | undefined | null): HostDiskInfo | null {
+	if (!metrics || !(metrics.diskTotal > 0)) return null;
+	return {
+		diskTotal: metrics.diskTotal,
+		diskFree: metrics.diskFree,
+		diskAvailable: metrics.diskTotal - metrics.diskUsed
+	};
+}

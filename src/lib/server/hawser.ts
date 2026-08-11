@@ -52,6 +52,13 @@ export interface EdgeConnection {
 		cpuUsage?: number;
 		memoryTotal?: number;
 		memoryUsed?: number;
+		// Docker data-root disk stats as reported by the agent (MetricsMessage
+		// below) - see deriveEdgeDiskInfo() in host-disk-core.ts for how /api/host
+		// turns these into the same {diskTotal, diskFree, diskAvailable} shape
+		// used for local connections.
+		diskTotal?: number;
+		diskUsed?: number;
+		diskFree?: number;
 	};
 }
 
@@ -244,7 +251,10 @@ export async function handleEdgeMetrics(
 				uptime: metrics.uptime,
 				cpuUsage: metrics.cpuUsage,
 				memoryTotal: metrics.memoryTotal,
-				memoryUsed: metrics.memoryUsed
+				memoryUsed: metrics.memoryUsed,
+				diskTotal: metrics.diskTotal,
+				diskUsed: metrics.diskUsed,
+				diskFree: metrics.diskFree
 			};
 		}
 
